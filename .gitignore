@@ -1,0 +1,7 @@
+#This tells Git to not upload your virtual environment folder and local database 
+#— they're too big and not needed on the server. Save with Ctrl + S.
+venv/
+__pycache__/
+*.pyc
+waf_logs.db
+.env
