@@ -91,7 +91,7 @@ body{font-family:var(--font);background:var(--bg0);color:var(--text1);
 textarea{width:100%;background:var(--bg0);border:1px solid var(--border);
          color:var(--text1);border-radius:8px;padding:12px 14px;
          font-size:13px;font-family:monospace;resize:vertical;
-         margin-bottom:12px;outline:none;transition:border .15s}
+         margin-bottom:4px;outline:none;transition:border .15s}
 textarea:focus{border-color:#444a6a}
 .btn{padding:10px 22px;background:var(--green);color:#fff;border:none;
      border-radius:7px;font-size:13px;cursor:pointer;font-weight:500;transition:opacity .15s}
@@ -103,6 +103,7 @@ textarea:focus{border-color:#444a6a}
 .result-box.BLOCKED    .result-head{background:var(--red-bg);   color:var(--red)}
 .result-box.SUSPICIOUS .result-head{background:var(--amber-bg); color:var(--amber)}
 .result-box.ALLOWED    .result-head{background:var(--green-bg); color:var(--green)}
+.result-box.ERROR      .result-head{background:var(--red-bg);   color:var(--red)}
 .chart-wrap{position:relative;height:200px;display:flex;
             align-items:center;justify-content:center}
 .chart-center{position:absolute;text-align:center;pointer-events:none}
@@ -113,7 +114,10 @@ textarea:focus{border-color:#444a6a}
          border:1px solid #3d2b0a;border-radius:7px;font-size:11px;
          font-family:monospace;cursor:pointer;width:100%;display:block;margin-bottom:6px}
 .sus-btn:hover{opacity:.8}
-.enter-hint{font-size:11px;color:var(--text3);margin-bottom:12px;margin-top:-8px}
+.enter-hint{font-size:11px;color:var(--text3);margin-bottom:12px;margin-top:4px}
+.char-count{font-size:11px;text-align:right;margin-bottom:8px;
+            color:var(--text3);transition:color .2s}
+.char-count.over{color:var(--red)}
 </style>
 </head>
 <body>
@@ -273,7 +277,7 @@ textarea:focus{border-color:#444a6a}
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;
                       letter-spacing:.05em;margin-bottom:10px">Click any to test instantly:</div>
           <button class="sus-btn" onclick="goTest('/login?user=admin&password=1234')">
-            /login?user=admin&amp;password=1234 <span style="opacity:.6">→ Credential Stuffing + Common Password</span>
+            /login?user=admin&amp;password=1234 <span style="opacity:.6">→ Credential Stuffing</span>
           </button>
           <button class="sus-btn" onclick="goTest('/login?user=root&password=qwerty')">
             /login?user=root&amp;password=qwerty <span style="opacity:.6">→ Credential Stuffing</span>
@@ -311,13 +315,15 @@ textarea:focus{border-color:#444a6a}
       <div class="grid-2">
         <div class="card">
           <div class="card-title">Analyze a Request</div>
-          <textarea id="payload" rows="5"
+          <textarea id="payload" rows="5" oninput="updateCharCount(this)"
             placeholder="Paste any URL or payload to test&#10;&#10;Attack examples:&#10;  ' OR 1=1--&#10;  ../../etc/passwd&#10;&#10;Suspicious examples:&#10;  /login?user=admin&amp;password=1234&#10;  /wp-admin/login.php&#10;  /.env"></textarea>
-          <div class="enter-hint">Press <kbd style="background:var(--bg3);border:1px solid var(--border);
-            border-radius:3px;padding:1px 6px;font-size:11px;font-family:monospace">Enter</kbd>
+          <div class="char-count" id="char-count">0 / 5000</div>
+          <div class="enter-hint">
+            Press <kbd style="background:var(--bg3);border:1px solid var(--border);
+              border-radius:3px;padding:1px 6px;font-size:11px;font-family:monospace">Enter</kbd>
             to analyze &nbsp;·&nbsp;
             <kbd style="background:var(--bg3);border:1px solid var(--border);
-            border-radius:3px;padding:1px 6px;font-size:11px;font-family:monospace">Shift+Enter</kbd>
+              border-radius:3px;padding:1px 6px;font-size:11px;font-family:monospace">Shift+Enter</kbd>
             for new line
           </div>
           <button class="btn" onclick="testPayload()">Analyze Request</button>
@@ -378,16 +384,16 @@ textarea:focus{border-color:#444a6a}
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- end content -->
+</div><!-- end main -->
 
 <script>
+// ── Tab Navigation ──────────────────────────────────────────
 const TAB_TITLES = {
   overview:'Overview', logs:'Request Logs',
   threats:'Threat Analysis', suspicious:'Suspicious Activity',
   test:'Request Tester'
 };
-
 function showTab(id, btn) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -396,6 +402,7 @@ function showTab(id, btn) {
   document.getElementById('page-title').textContent = TAB_TITLES[id];
 }
 
+// ── Table row builder ───────────────────────────────────────
 function makeRow(l, cols) {
   const status = (l.status||'').toUpperCase();
   const sev    = (l.severity||'NONE').toUpperCase();
@@ -414,16 +421,21 @@ function makeRow(l, cols) {
   return '<tr>' + cols.map(c => cells[c]).join('') + '</tr>';
 }
 
+// ── Dashboard stats ─────────────────────────────────────────
 let donutChart = null;
 
 async function updateStats() {
-  const d = await fetch('/api/stats').then(r => r.json());
-  document.getElementById('s-total').textContent     = d.total;
-  document.getElementById('s-blocked').textContent   = d.blocked;
-  document.getElementById('s-warned').textContent    = d.warned;
-  document.getElementById('s-allowed').textContent   = d.allowed;
-  document.getElementById('donut-total').textContent = d.total;
-  updateDonut(d.blocked, d.warned, d.allowed);
+  try {
+    const res = await fetch('/api/stats');
+    const d   = await res.json();
+    if (!res.ok || d.error) return;
+    document.getElementById('s-total').textContent     = d.total;
+    document.getElementById('s-blocked').textContent   = d.blocked;
+    document.getElementById('s-warned').textContent    = d.warned;
+    document.getElementById('s-allowed').textContent   = d.allowed;
+    document.getElementById('donut-total').textContent = d.total;
+    updateDonut(d.blocked, d.warned, d.allowed);
+  } catch(e) { console.warn('Stats fetch failed:', e); }
 }
 
 function updateDonut(blocked, warned, allowed) {
@@ -443,31 +455,37 @@ function updateDonut(blocked, warned, allowed) {
   }
 }
 
+// ── Dashboard logs ──────────────────────────────────────────
 async function updateLogs() {
-  const logs = await fetch('/api/logs').then(r => r.json());
-  const c7 = ['time','ip','payload','threat','sev','score','status'];
-  const c6 = ['time','ip','payload','threat','sev','score'];
+  try {
+    const res  = await fetch('/api/logs');
+    const data = await res.json();
+    // Guard: ensure it's always an array
+    const logs = Array.isArray(data) ? data : [];
+    const c7   = ['time','ip','payload','threat','sev','score','status'];
+    const c6   = ['time','ip','payload','threat','sev','score'];
 
-  document.getElementById('overview-logs').innerHTML =
-    logs.slice(0,8).map(l=>makeRow(l,c7)).join('') ||
-    '<tr><td colspan="7" class="empty">No requests yet</td></tr>';
+    document.getElementById('overview-logs').innerHTML =
+      logs.slice(0,8).map(l=>makeRow(l,c7)).join('') ||
+      '<tr><td colspan="7" class="empty">No requests yet</td></tr>';
 
-  document.getElementById('all-logs').innerHTML =
-    logs.map(l=>makeRow(l,c7)).join('') ||
-    '<tr><td colspan="7" class="empty">No requests logged yet</td></tr>';
+    document.getElementById('all-logs').innerHTML =
+      logs.map(l=>makeRow(l,c7)).join('') ||
+      '<tr><td colspan="7" class="empty">No requests logged yet</td></tr>';
 
-  const blocked = logs.filter(l=>(l.status||'').toUpperCase()==='BLOCKED');
-  document.getElementById('blocked-logs').innerHTML =
-    blocked.map(l=>makeRow(l,c6)).join('') ||
-    '<tr><td colspan="6" class="empty">No blocked requests yet</td></tr>';
+    const blocked = logs.filter(l=>(l.status||'').toUpperCase()==='BLOCKED');
+    document.getElementById('blocked-logs').innerHTML =
+      blocked.map(l=>makeRow(l,c6)).join('') ||
+      '<tr><td colspan="6" class="empty">No blocked requests yet</td></tr>';
 
-  renderThreatBars(logs);
-  renderSeverityBars(logs);
-  renderCategoryBars(logs);
-  renderSuspiciousTab(logs);
+    renderThreatBars(logs);
+    renderSeverityBars(logs);
+    renderCategoryBars(logs);
+    renderSuspiciousTab(logs);
 
-  document.getElementById('last-updated').textContent =
-    'Last updated: ' + new Date().toLocaleTimeString();
+    document.getElementById('last-updated').textContent =
+      'Last updated: ' + new Date().toLocaleTimeString();
+  } catch(e) { console.warn('Logs fetch failed:', e); }
 }
 
 function renderThreatBars(logs) {
@@ -523,26 +541,21 @@ const SUS_COLORS = {
   'Admin Panel Probe':'#7f77dd','Security Scanner':'#378add',
   'Automated Bot':'#1d9e75','Encoded Payload':'#e24b4a',
   'Sensitive File Probe':'#d4537e','Recon Probe':'#888780',
-  'Null Byte Injection':'#ef9f27','HTTP Method Abuse':'#378add',
-  'Directory Traversal':'#d85a30',
 };
 
 function renderSuspiciousTab(logs) {
   const suspicious = logs.filter(l=>(l.status||'').toUpperCase()==='SUSPICIOUS');
   document.getElementById('sus-total').textContent = suspicious.length;
-
-  const credKeywords = ['Credential','Common Password','Brute'];
-  const scanKeywords = ['Scanner','Bot','Probe','Recon'];
+  const credKw = ['Credential','Common Password','Brute'];
+  const scanKw = ['Scanner','Bot','Probe','Recon'];
   document.getElementById('sus-cred').textContent =
-    suspicious.filter(l=>credKeywords.some(k=>(l.threat||'').includes(k))).length;
+    suspicious.filter(l=>credKw.some(k=>(l.threat||'').includes(k))).length;
   document.getElementById('sus-scan').textContent =
-    suspicious.filter(l=>scanKeywords.some(k=>(l.threat||'').includes(k))).length;
-
+    suspicious.filter(l=>scanKw.some(k=>(l.threat||'').includes(k))).length;
   const cats = {};
   suspicious.forEach(l=>{const c=l.threat||'Unknown';cats[c]=(cats[c]||0)+1;});
   const entries = Object.entries(cats).sort((a,b)=>b[1]-a[1]);
   const max = entries[0]?.[1]||1;
-
   document.getElementById('sus-cat-bars').innerHTML = entries.length
     ? entries.map(([k,v])=>`
         <div class="bar-row">
@@ -552,75 +565,120 @@ function renderSuspiciousTab(logs) {
           <div class="bar-val">${v}</div>
         </div>`).join('')
     : '<div class="empty">No suspicious activity logged yet</div>';
-
   const c7 = ['time','ip','payload','threat','sev','score','status'];
   document.getElementById('sus-log-body').innerHTML = suspicious.length
     ? suspicious.map(l=>makeRow(l,c7)).join('')
     : '<tr><td colspan="7" class="empty">No suspicious requests yet — click a quick test above!</td></tr>';
 }
 
+// ── Char counter ────────────────────────────────────────────
+function updateCharCount(el) {
+  const count   = el.value.length;
+  const display = document.getElementById('char-count');
+  display.textContent = `${count} / 5000`;
+  display.classList.toggle('over', count > 5000);
+}
+
+// ── Request Tester ──────────────────────────────────────────
+function showError(status, title, message) {
+  const box  = document.getElementById('result-box');
+  const head = document.getElementById('result-head');
+  const body = document.getElementById('result-body');
+  box.style.display = 'block';
+  box.className     = 'result-box ERROR';
+  head.textContent  = `⛔ ${title}`;
+  body.innerHTML    = `<strong>HTTP ${status}</strong> &nbsp;|&nbsp; ${message}`;
+}
+
 async function testPayload() {
   const payload = document.getElementById('payload').value.trim();
   if (!payload) return;
 
-  const data = await fetch('/api/analyze', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({payload})
-  }).then(r=>r.json());
-
-  const box  = document.getElementById('result-box');
-  const head = document.getElementById('result-head');
-  const body = document.getElementById('result-body');
-  const icons = {BLOCKED:'🚫',SUSPICIOUS:'⚠️',ALLOWED:'✅'};
-
-  box.style.display = 'block';
-  box.className     = 'result-box ' + data.status;
-  head.textContent  = `${icons[data.status]||''} ${data.status} — ${data.threat}`;
-
-  const attackScore = data.score || 0;
-  const susScore    = data.suspicious_score || 0;
-  const scoreDisplay = attackScore > 0
-    ? `<strong>Attack Score:</strong> ${attackScore}`
-    : `<strong>Suspicion Score:</strong> ${susScore}`;
-
-  let html = `<strong>Severity:</strong> ${data.severity} &nbsp;|&nbsp; ${scoreDisplay}<br>`;
-
-  if (data.threats && data.threats.length) {
-    html += `<strong>Attack threats:</strong><br>`;
-    html += data.threats.map(t=>
-      `&nbsp;&nbsp;🚫 ${t.threat} — ${t.severity} (score: ${t.score})`
-    ).join('<br>') + '<br>';
+  // ── Guard 1: Frontend size check (before sending) ──
+  if (payload.length > 5000) {
+    showError(413, 'Payload Too Large',
+      `Your input is <strong>${payload.length}</strong> characters. Limit is <strong>5000</strong>.`);
+    return;
   }
 
-  if (data.suspicious_flags && data.suspicious_flags.length) {
-    html += `<strong>Suspicious flags:</strong><br>`;
-    html += data.suspicious_flags.map(f=>
-      `&nbsp;&nbsp;⚠️ ${f.reason} — ${f.detail} (score: ${f.score})`
-    ).join('<br>') + '<br>';
-  }
+  try {
+    const res  = await fetch('/api/analyze', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({payload})
+    });
 
-  if (!data.threats?.length && !data.suspicious_flags?.length) {
-    html += 'Request is clean. No threats or suspicious patterns detected.';
-  }
+    const data = await res.json();
 
-  body.innerHTML = html;
-  updateStats();
-  updateLogs();
+    // ── Guard 2: Backend returned an error (4xx / 5xx) ──
+    if (!res.ok || data.error) {
+      showError(
+        res.status,
+        data.error || 'Request Failed',
+        data.message || 'An unexpected error occurred on the server.'
+      );
+      return;
+    }
+
+    // ── Normal WAF result ──────────────────────────────
+    const box  = document.getElementById('result-box');
+    const head = document.getElementById('result-head');
+    const body = document.getElementById('result-body');
+    const icons = {BLOCKED:'🚫', SUSPICIOUS:'⚠️', ALLOWED:'✅'};
+
+    box.style.display = 'block';
+    box.className     = 'result-box ' + data.status;
+    head.textContent  = `${icons[data.status]||''} ${data.status} — ${data.threat}`;
+
+    const attackScore  = data.score || 0;
+    const susScore     = data.suspicious_score || 0;
+    const scoreDisplay = attackScore > 0
+      ? `<strong>Attack Score:</strong> ${attackScore}`
+      : `<strong>Suspicion Score:</strong> ${susScore}`;
+
+    let html = `<strong>Severity:</strong> ${data.severity} &nbsp;|&nbsp; ${scoreDisplay}<br>`;
+
+    if (data.threats?.length) {
+      html += `<strong>Attack threats:</strong><br>`;
+      html += data.threats.map(t =>
+        `&nbsp;&nbsp;🚫 ${t.threat} — ${t.severity} (score: ${t.score})`
+      ).join('<br>') + '<br>';
+    }
+    if (data.suspicious_flags?.length) {
+      html += `<strong>Suspicious flags:</strong><br>`;
+      html += data.suspicious_flags.map(f =>
+        `&nbsp;&nbsp;⚠️ ${f.reason} — ${f.detail} (score: ${f.score})`
+      ).join('<br>') + '<br>';
+    }
+    if (!data.threats?.length && !data.suspicious_flags?.length)
+      html += 'Request is clean. No threats or suspicious patterns detected.';
+
+    body.innerHTML = html;
+    updateStats();
+    updateLogs();
+
+  } catch (err) {
+    // ── Guard 3: Network failure / server down ─────────
+    showError('—', 'Network Error',
+      'Could not reach the server. Is Flask running?');
+  }
 }
 
 function quickTest(btn) {
   document.getElementById('payload').value = btn.dataset.p;
+  updateCharCount(document.getElementById('payload'));
   testPayload();
 }
 
 function goTest(payload) {
   document.getElementById('payload').value = payload;
-  const testBtn = document.querySelector('.nav-btn[onclick*="test"]');
+  updateCharCount(document.getElementById('payload'));
+  const testBtn = document.querySelector('.nav-btn[onclick*="\'test\'"]');
   showTab('test', testBtn);
   testPayload();
 }
 
+// ── Auto-refresh ────────────────────────────────────────────
 async function refreshAll() {
   await updateStats();
   await updateLogs();
@@ -628,7 +686,7 @@ async function refreshAll() {
 setInterval(refreshAll, 4000);
 refreshAll();
 
-// ── Enter key triggers analyze · Shift+Enter still adds a new line ──
+// ── Enter key trigger ───────────────────────────────────────
 document.getElementById('payload').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();

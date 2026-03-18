@@ -104,6 +104,11 @@ def is_rate_limited(ip):
 
 @app.before_request
 def enforce_rate_limit():
+    # Exempt dashboard auto-refresh endpoints from rate limiting
+    EXEMPT = {'/api/stats', '/api/logs', '/'}
+    if request.path in EXEMPT:
+        return
+
     ip = request.remote_addr or "unknown"
     if is_rate_limited(ip):
         log_error("RATE_LIMIT", f"IP {ip} exceeded {RATE_LIMIT} requests/{RATE_WINDOW}s", ip=ip)
