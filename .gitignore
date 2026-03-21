@@ -4,5 +4,5 @@ venv/
 __pycache__/
 *.pyc
 waf_logs.db
-waf_errors.log
 .env
+waf_errors.log
