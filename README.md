@@ -2,7 +2,8 @@
 
 A robust Web Application Firewall (WAF) built with Flask that protects web applications from common attack vectors including SQL Injection, XSS, Path Traversal, Remote Code Execution, and credential stuffing attacks.
 
-[Shield WAF app] (https://web-app-firewall.onrender.com/)
+## 🚀 Live Demo
+[![Shield WAF](https://img.shields.io/badge/Live%20App-Visit-blue?style=for-the-badge&logo=firefox)](https://web-app-firewall.onrender.com/)
 
 ## Features
 
